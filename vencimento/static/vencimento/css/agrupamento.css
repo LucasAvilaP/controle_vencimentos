@@ -1,0 +1,22 @@
+.form-busca {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.form-busca > div {
+  display: flex;
+  gap: 10px;
+}
+
+.form-busca > div > div {
+  flex: 1;
+}
+
+/* Estilização para telas pequenas */
+@media (max-width: 600px) {
+  .form-busca > div {
+    flex-direction: column;
+  }
+}

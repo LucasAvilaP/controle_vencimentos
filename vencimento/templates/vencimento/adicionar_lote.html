@@ -1,0 +1,20 @@
+<!-- templates/vencimentos/adicionar_lote.html -->
+
+{% extends 'vencimento/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+    <h2>Adicionar Novo Lote</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        {{ form|crispy }}
+        <button type="submit" class="btn btn-primary">Adicionar Lote</button>
+    </form>
+{% endblock %}
