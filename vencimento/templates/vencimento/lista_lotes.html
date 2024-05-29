@@ -56,6 +56,7 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 
 
+
 {% extends 'vencimento/base.html' %}
 {% load static %}
 
@@ -71,15 +72,52 @@
 {% endif %}
 
 <h2>Lista de Lotes</h2>
-
+<a href="{% url 'vencimento:exportar_lotes_excel' %}" class="btn btn-primary" style="margin-bottom: 10px;">Exportar Lotes para Excel</a>
 <!-- Formulário de busca atualizado com agrupamento -->
-<form method="get" action="{% url 'lista_lotes' %}" class="form-busca">
-  <div class="campo-busca">
-    <input type="text" name="q" placeholder="Buscar produto ou identificação...">
-    <button type="submit">Buscar</button>
-  </div>
+<form method="get" action="{% url 'vencimento:lista_lotes' %}" class="form-busca">
+
   
-  <!-- Agrupamento de campos de data -->
+  
+  <div class="chart-container">
+      <div class="chart">
+          <canvas id="categoriaChart"></canvas>
+      </div>
+      <div class="chart">
+          <canvas id="statusChart"></canvas>
+      </div>
+  </div>
+  <div style="display: flex;">
+    <div class="campo-categoria">
+      <label for="categoria">Categoria</label>
+      <select name="categoria">
+        <option value="">Todas Categorias</option>
+        {% for categoria in categorias %}
+        <option value="{{ categoria.id }}">{{ categoria.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="campo-casa">
+      <label for="casa_destinada">Casa Destinada</label>
+      <select name="casa_destinada">
+        <option value="">Todas as Casas</option>
+        {% for casa in casas %}
+        <option value="{{ casa.id }}">{{ casa.nome }}</option>
+        {% endfor %}
+      </select>
+      
+    </div>
+
+    <div class="campo-status">
+      <label for="status">Status</label>
+      <select name="status">
+        <option value="">Todos</option>
+        <option value="valido">Válido</option>
+        <option value="proximo">Próximo do Vencimento</option>
+        <option value="urgente">Urgente</option>
+        <option value="vencido">Vencido</option>
+      </select>
+    </div>
+  </div>
   <div class="grupo-datas">
     <div class="data-chegada">
       <label for="chegada_de">Data de Chegada: De</label>
@@ -96,37 +134,8 @@
       <label for="validade_ate">Até</label>
       <input type="date" name="validade_ate">
     </div>
+    <button type="submit">Filtrar</button>
   </div>
-
-  <!-- Outros campos -->
-  <div class="campo-categoria">
-    <label for="categoria">Categoria</label>
-    <select name="categoria">
-      <option value="">Todas Categorias</option>
-      {% for categoria in categorias %}
-      <option value="{{ categoria.id }}">{{ categoria.nome }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <div class="campo-status">
-    <label for="status">Status</label>
-    <select name="status">
-      <option value="">Todos</option>
-      <option value="valido">Válido</option>
-      <option value="proximo">Próximo do Vencimento</option>
-      <option value="urgente">Urgente</option>
-      <option value="vencido">Vencido</option>
-    </select>
-  </div>
-  <div class="chart-container">
-    <div class="chart">
-        <canvas id="categoriaChart"></canvas>
-    </div>
-    <div class="chart">
-        <canvas id="statusChart"></canvas>
-    </div>
-</div>
   
 </form>
 
@@ -157,7 +166,7 @@
       <td>{{ lote.quantidade }}</td>
       <td>{{ lote.data_chegada }}</td>
       <td>{{ lote.data_validade }}</td>
-      <td>{{ lote.casa.nome }}</td>
+      <td>{{ lote.casa_destinada.nome }}</td>
       <td>
         <span class="status-indicator
                      {% if lote.esta_vencido %}vencido
@@ -173,18 +182,23 @@
         {% endif %}
       </td>
       <td>
-        <form method="post" action="{% url 'lista_lotes' %}">
+        <form method="post" action="{% url 'vencimento:registrar_saida' %}">
           {% csrf_token %}
           <input type="hidden" name="lote_id" value="{{ lote.id }}">
           <input type="number" name="quantidade_a_retirar" style="margin-bottom: 10px; width: 80px;" class="input-quantidade" min="1" max="{{ lote.quantidade }}" required>
-          <button type="submit" class="btn btn-primary btn-sm btn-registrar">Registrar Saída</button>
-        </form>
+          <button type="submit" class="btn btn-primary btn-sm">Registrar Saída</button>
+      </form>
       </td>
     </tr>
     {% endfor %}
-    <div id="categoriaData" style="display:none;">{{ categoria_data|json_script:"categoriaData" }}</div>
+    <div id="categoriaData" style="display:none;">{{ categoria_data }}</div>
     <div id="statusData" style="display:none;">{{ status_data|json_script:"statusData" }}</div>  
-    <a href="{% url 'exportar_lotes_excel' %}" class="btn btn-primary">Exportar Lotes para Excel</a>
+   <form class="form-busca">
+    <div class="campo-busca">
+      <input type="text" name="q" placeholder="Buscar produto ou identificação...">
+      <button type="submit">Buscar</button>
+    </div>
+    </form>
 
   </tbody>
 </table>
@@ -238,70 +252,82 @@ function getCookie(name) {
 
 
 
-  document.addEventListener('DOMContentLoaded', function () {
-    const categoriaData = JSON.parse(document.getElementById('categoriaData').textContent);
-    const rawData = JSON.parse(document.getElementById('statusData').textContent);
-    console.log("Status Data:", statusData);
+document.addEventListener('DOMContentLoaded', function () {
+  const categoriaData = JSON.parse(document.getElementById('categoriaData').textContent || '[]');
+  const rawData = JSON.parse(document.getElementById('statusData').textContent);
 
-    const ctx1 = document.getElementById('categoriaChart').getContext('2d');
-    const categoriaChart = new Chart(ctx1, {
-        type: 'pie',
-        data: {
-            labels: categoriaData.map(data => data[0]),
-            datasets: [{
-                label: 'Quantidade por Categoria',
-                data: categoriaData.map(data => data[1]),
-                backgroundColor: [
-                    '#bcb9d6',
-                    '#9e9c9b',
-                    'rgba(255, 206, 86, 0.2)',
-                    'rgba(75, 192, 192, 0.2)',
-                    'rgba(153, 102, 255, 0.2)',
-                    'rgba(255, 159, 64, 0.2)'
-                ],
-                borderColor: [
-                    '#9b97c2',
-                    '#8c8988',
-                    'rgba(255, 206, 86, 1)',
-                    'rgba(75, 192, 192, 1)',
-                    'rgba(153, 102, 255, 1)',
-                    'rgba(255, 159, 64, 1)'
-                ],
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Distribuição de Lotes por Categoria'
-                }
-            }
-        }
-    });
+  const ctx1 = document.getElementById('categoriaChart').getContext('2d');
+  const categoriaChart = new Chart(ctx1, {
+      type: 'pie',
+      data: {
+          labels: categoriaData.map(data => data[0]),
+          datasets: [{
+              label: 'Quantidade por Categoria',
+              data: categoriaData.map(data => data[1]),
+              backgroundColor: [
+                  '#bcb9d6',
+                  '#9e9c9b',
+                  'rgba(255, 206, 86, 0.2)',
+                  'rgba(75, 192, 192, 0.2)',
+                  'rgba(153, 102, 255, 0.2)',
+                  'rgba(255, 159, 64, 0.2)'
+              ],
+              borderColor: [
+                  '#9b97c2',
+                  '#8c8988',
+                  'rgba(255, 206, 86, 1)',
+                  'rgba(75, 192, 192, 1)',
+                  'rgba(153, 102, 255, 1)',
+                  'rgba(255, 159, 64, 1)'
+              ],
+              borderWidth: 1
+          }]
+      },
+      options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+              legend: {
+                  position: 'top',
+              },
+              tooltip: {
+                  callbacks: {
+                      label: function(tooltipItem) {
+                          let sum = 0;
+                          let dataArr = tooltipItem.dataset.data;
+                          dataArr.map(data => {
+                              sum += Number(data);
+                          });
+                          let percentage = (tooltipItem.raw * 100 / sum).toFixed(2) + "%";
+                          return tooltipItem.label + ': ' + tooltipItem.raw + ' (' + percentage + ')';
+                      }
+                  }
+              },
+              title: {
+                  display: true,
+                  text: 'Distribuição de Lotes por Categoria'
+              }
+          }
+      }
+  });
 
-   function prepareChartData(data) {
+  function prepareChartData(data) {
       return {
           labels: data.map(item => item[0]),
           datasets: [{
               label: 'Quantidade por Status',
               data: data.map(item => item[1]),
               backgroundColor: [
-                  '#70b67c',  
-                  '#ff7b5a', 
-                  '#ffff7a', 
-                  '#404041'   
+                  '#70b67c',
+                  '#ff7b5a',
+                  '#ffff7a',
+                  '#404041'
               ],
               borderColor: [
                   '#31aa56',
-                  '#ff5232', 
-                  '#ffd700', 
-                  '202122' 
+                  '#ff5232',
+                  '#ffd700',
+                  '202122'
               ],
               borderWidth: 1
           }]
@@ -321,6 +347,19 @@ function getCookie(name) {
               legend: {
                   position: 'top',
               },
+              tooltip: {
+                  callbacks: {
+                      label: function(tooltipItem) {
+                          let sum = 0;
+                          let dataArr = tooltipItem.dataset.data;
+                          dataArr.map(data => {
+                              sum += Number(data);
+                          });
+                          let percentage = (tooltipItem.raw * 100 / sum).toFixed(2) + "%";
+                          return tooltipItem.label + ': ' + tooltipItem.raw + ' (' + percentage + ')';
+                      }
+                  }
+              },
               title: {
                   display: true,
                   text: 'Distribuição de Lotes por Status'
@@ -329,6 +368,7 @@ function getCookie(name) {
       }
   });
 });
+
 </script>
 
 

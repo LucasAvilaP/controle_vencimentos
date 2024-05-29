@@ -30,6 +30,11 @@ class Casa(models.Model):
     nome = models.CharField(max_length=100)
     endereco = models.CharField(max_length=100)
 
+    class Meta:
+        permissions = [
+            ('can_transfer', 'Can perform lot transfers'),  # Permissão para transferir lotes
+        ]
+
     def __str__(self):
         return self.nome
 
@@ -40,11 +45,11 @@ class Lote(models.Model):
     categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE, related_name='lotes')
     identificacao = models.CharField(max_length=50, verbose_name="Identificação do Lote")
     quantidade = models.PositiveIntegerField(default=0, verbose_name="Quantidade em Estoque")
-    quantidade_atual = models.PositiveIntegerField(default=0, verbose_name="Quantidade Atual")
     data_chegada = models.DateField()
     data_validade = models.DateField()
+    casa = models.ForeignKey(Casa, on_delete=models.CASCADE, related_name='lotes', null=True)
+    casa_destinada = models.ForeignKey(Casa, on_delete=models.CASCADE, related_name='lotes_destined', verbose_name="Casa Destinada", null=True)  # Casa para a qual o lote é destinado
     notificacao_enviada = models.BooleanField(default=False)
-    casa = models.ForeignKey(Casa, on_delete=models.CASCADE, related_name= 'lotes', null=True)
 
     def registrar_saida(self, quantidade):
         """Registra a saída de uma quantidade de produtos do lote."""
@@ -72,7 +77,8 @@ class Lote(models.Model):
         return self.data_validade <= data_urgencia and not self.esta_vencido()
 
     def __str__(self):
-        return f'{self.identificacao} - Lote de {self.produto.nome} - Validade: {self.data_validade}'
+        return f'{self.identificacao.upper()} - Lote de {self.produto.nome} - Quantidade: {self.quantidade} - Validade: {self.data_validade} - Destinado a {self.casa_destinada.nome}'
+    
 
     class Meta:
         verbose_name = "Lote"

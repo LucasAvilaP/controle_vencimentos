@@ -3,6 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.forms import AuthenticationForm
 from django.db.models import Q
 from .models import Lote, Categoria, ConfiguracaoGlobal
+from vencimento.models import Casa,Lote
 from django.utils import timezone
 from django.urls import reverse
 from datetime import timedelta
@@ -16,6 +17,7 @@ from openpyxl.utils import get_column_letter
 import requests
 from requests import request
 from .forms import LoteForm, Lote
+from vencimento.forms import TransferenciaLoteForm, SaidaProdutoForm
 from django.contrib import messages
 from django.core.mail import send_mail
 import json
@@ -30,12 +32,20 @@ def lista_lotes(request):
     validade_ate = request.GET.get('validade_ate')
     categoria_id = request.GET.get('categoria')
     status = request.GET.get('status')
+    casa_atual_id = request.session.get('casa_id', None)
+    casa_atual = Casa.objects.get(id=casa_atual_id)
     configuracao = ConfiguracaoGlobal.objects.first()
     dias_para_vencimento_proximo = configuracao.dias_para_vencimento_proximo if configuracao else 30
     dias_para_urgencia = 30
+    lotes = Lote.objects.filter(casa=casa_atual)  # Outras casas só veem lotes transferidos
+    casa_destinada_id = request.GET.get('casa_destinada')  # ID da casa destinada
+    casas = Casa.objects.all()  # Pegar todas as casas para o dropdown
 
-    lotes = Lote.objects.all()
+    if casa_destinada_id:  # Filtrar por casa destinada se um ID foi fornecido
+        lotes = lotes.filter(casa_destinada_id=casa_destinada_id)
 
+
+    
     # Incluir a lógica para tratar a saída de produtos
     if request.method == 'POST':
         lote_id = request.POST.get('lote_id')
@@ -74,6 +84,11 @@ def lista_lotes(request):
     elif status == 'vencido':
         lotes = lotes.filter(data_validade__lte=hoje)
 
+
+    categorias = Categoria.objects.all()
+    categoria_data = list(lotes.values('categoria__nome')
+                                .annotate(total=Count('id'))
+                                .values_list('categoria__nome', 'total'))
     # Refinar as condições de status para evitar sobreposições
     status_counts = {
         'Valido': lotes.filter(data_validade__gt=hoje + timedelta(days=dias_para_vencimento_proximo)).count(),
@@ -82,13 +97,11 @@ def lista_lotes(request):
         'Vencido': lotes.filter(data_validade__lte=hoje).count(),
     }
 
-    categorias = Categoria.objects.all()
-    categoria_data = list(categorias.annotate(total=Count('lotes')).values_list('nome', 'total'))
-
     return render(request, 'vencimento/lista_lotes.html', {
         'lotes': lotes,
         'categorias': categorias,
-        'categoria_data': categoria_data,
+        'casas': casas,  # Passar 'casas' para o contexto
+        'categoria_data': json.dumps(categoria_data),
         'status_data': [(key, value) for key, value in status_counts.items()]
     })
 
@@ -107,7 +120,7 @@ def adicionar_lote(request):
         if form.is_valid():
             form.save()
             messages.success(request, 'Lote adicionado com sucesso!')
-            return redirect('lista_lotes')
+            return redirect('vencimento:lista_lotes')
         else:
             messages.error(request, 'Por favor, corrija os erros abaixo.')
     else:
@@ -116,20 +129,37 @@ def adicionar_lote(request):
 
 
 @require_POST
-@csrf_exempt
-def deletar_lote(request):
+def registrar_saida(request):
+    lote_id = request.POST.get('lote_id')
+    quantidade = request.POST.get('quantidade_a_retirar')
+    # Implemente a lógica para registrar a saída
     try:
-        data = json.loads(request.body)
-        lote_id = data.get('lote_id')
-        if lote_id:
-            lote = Lote.objects.get(id=lote_id)
-            lote.delete()
-            return JsonResponse({'success': True})
+        lote = Lote.objects.get(id=lote_id)
+        if lote.quantidade >= int(quantidade):
+            lote.quantidade -= int(quantidade)
+            lote.save()
+            messages.success(request, 'Saída registrada com sucesso.')
+        else:
+            messages.error(request, 'Quantidade a retirar excede o estoque disponível.')
     except Lote.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Lote não encontrado'}, status=404)
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Dados inválidos'}, status=400)
-    return JsonResponse({'success': False, 'error': 'ID do lote não fornecido'}, status=400)
+        messages.error(request, 'Lote não encontrado.')
+    return redirect('vencimento:lista_lotes')
+
+
+@login_required
+def transferencia_lotes_view(request):
+    form = TransferenciaLoteForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        novo_lote = form.save()
+        if novo_lote:
+            messages.success(request, f'Lote transferido com sucesso para {novo_lote.casa.nome}.')
+        else:
+            messages.error(request, 'Falha ao transferir lote. Verifique a quantidade disponível.')
+
+        return redirect('vencimento:lista_lotes')
+
+    return render(request, 'vencimento/transferencia_lotes.html', {'form': form})
+
 
 
 

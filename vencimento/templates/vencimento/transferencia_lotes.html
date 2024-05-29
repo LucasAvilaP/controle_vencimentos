@@ -1,0 +1,23 @@
+{% extends 'vencimento/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+  <h2>Transferência de Lotes</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form|crispy }}
+    <button type="submit">Transferir</button>
+  </form>
+  {% block javascript %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    $('.select2').select2({
+        placeholder: 'Selecione um lote',
+        allowClear: true
+    });
+});
+</script>
+{% endblock %}
+
+
+{% endblock %}
