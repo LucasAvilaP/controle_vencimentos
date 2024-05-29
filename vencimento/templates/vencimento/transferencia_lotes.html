@@ -8,16 +8,32 @@
     {{ form|crispy }}
     <button type="submit">Transferir</button>
   </form>
-  {% block javascript %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .select2-container--default .select2-selection--single {
+        background-color: #fff; /* Fundo branco */
+        border: 1px solid #aaa; /* Borda mais visível */
+        border-radius: 4px; /* Arredondamento da borda */
+    }
+    .select2-dropdown {
+        background-color: #fff; /* Fundo branco para o dropdown */
+        border: 1px solid #aaa; /* Borda do dropdown */
+    }
+</style>
+{% endblock %}
+
+{% block javascript %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2/dist/js/select2.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2/dist/css/select2.min.css" rel="stylesheet" />
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+$(document).ready(function() {
     $('.select2').select2({
         placeholder: 'Selecione um lote',
         allowClear: true
     });
 });
 </script>
-{% endblock %}
-
-
 {% endblock %}

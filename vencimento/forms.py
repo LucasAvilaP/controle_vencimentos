@@ -1,7 +1,7 @@
 from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Field, Submit
-from .models import Lote, Casa
+from .models import Lote, Casa, Produto
 import logging
 from django.db import transaction
 
@@ -11,6 +11,11 @@ from django.db import transaction
 
 class LoteForm(forms.ModelForm):
     casa_destinada = forms.ModelChoiceField(queryset=Casa.objects.all(), required=True, label="Casa Destinada")
+    produto = forms.ModelChoiceField(
+        queryset=Produto.objects.all().order_by('nome'),
+        widget=forms.Select(attrs={'class': 'select2', 'style': 'width: 100%'}),
+        label="Produto"
+    )
 
     class Meta:
         model = Lote
@@ -70,10 +75,13 @@ class SaidaProdutoForm(forms.Form):
 
 
 class TransferenciaLoteForm(forms.Form):
-    lote = forms.ModelChoiceField(queryset=Lote.objects.filter(casa__nome="Estoque Central"), label="Lote")
+    lote = forms.ModelChoiceField(
+        queryset=Lote.objects.filter(casa__nome="Estoque Central").order_by('identificacao'),
+        label="Lote",
+        widget=forms.Select(attrs={'class': 'select2', 'style': 'width: 100%'})
+    )
     quantidade = forms.IntegerField(min_value=1)
     casa_destino = forms.ModelChoiceField(queryset=Casa.objects.exclude(nome="Estoque Central"))
-
 
     def clean(self):
         cleaned_data = super().clean()
