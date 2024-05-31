@@ -161,6 +161,22 @@ def transferencia_lotes_view(request):
     return render(request, 'vencimento/transferencia_lotes.html', {'form': form})
 
 
+@require_POST
+@csrf_exempt
+def deletar_lote(request):
+    try:
+        data = json.loads(request.body)
+        lote_id = data.get('lote_id')
+        if lote_id:
+            lote = Lote.objects.get(id=lote_id)
+            lote.delete()
+            return JsonResponse({'success': True})
+    except Lote.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Lote não encontrado'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Dados inválidos'}, status=400)
+    return JsonResponse({'success': False, 'error': 'ID do lote não fornecido'}, status=400)
+
 
 
 @login_required
