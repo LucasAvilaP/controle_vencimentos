@@ -1,7 +1,7 @@
 from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Field, Submit
-from .models import Lote, Casa, Produto
+from .models import Lote, Casa, Produto, HistoricoLog
 import logging
 from django.db import transaction
 
@@ -41,12 +41,19 @@ class LoteForm(forms.ModelForm):
             Submit('submit', 'Adicionar Lote', css_class='btn-primary')
         )
 
-    def save(self, commit=True):
+    def save(self, commit=True, user=None):
         instance = super().save(commit=False)
-        # Define a casa como Estoque Central, ignorando o input do usuário para armazenamento
         instance.casa = Casa.objects.get(nome="Estoque Central")
         if commit:
             instance.save()
+            # Criar log após salvar o lote
+            HistoricoLog.objects.create(
+                usuario=user,
+                lote=instance,
+                casa=instance.casa,
+                acao='AD',
+                descricao=f'Adicionado novo lote de {instance.quantidade} unidades do produto {instance.produto.nome} com validade até {instance.data_validade.strftime("%d/%m/%Y")} na casa {instance.casa.nome}.'
+            )
         return instance
 
 
@@ -94,26 +101,27 @@ class TransferenciaLoteForm(forms.Form):
         return cleaned_data
 
     def save(self, commit=True):
-        lote = self.cleaned_data.get('lote')
+        lote_original = self.cleaned_data.get('lote')
         quantidade = self.cleaned_data.get('quantidade')
         casa_destino = self.cleaned_data.get('casa_destino')
 
-        if lote.quantidade >= quantidade:
+        if lote_original.quantidade >= quantidade:
             with transaction.atomic():
                 # Reduz a quantidade no lote de origem
-                lote.quantidade -= quantidade
-                lote.save(update_fields=['quantidade'])
+                lote_original.quantidade -= quantidade
+                lote_original.save(update_fields=['quantidade'])
 
                 # Atualiza ou cria um novo lote na casa de destino
                 novo_lote, created = Lote.objects.update_or_create(
-                    produto=lote.produto,
-                    categoria=lote.categoria,
-                    identificacao=lote.identificacao,
+                    produto=lote_original.produto,
+                    categoria=lote_original.categoria,
+                    identificacao=lote_original.identificacao,
                     casa=casa_destino,
                     casa_destinada=casa_destino,
                     defaults={
-                        'data_chegada': lote.data_chegada,
-                        'data_validade': lote.data_validade,
+                        'data_chegada': lote_original.data_chegada,
+                        'data_validade': lote_original.data_validade,
+                        'quantidade': 0,  # Começar com 0 para ajustar após verificação de 'created'
                         'notificacao_enviada': False
                     }
                 )
@@ -123,7 +131,6 @@ class TransferenciaLoteForm(forms.Form):
                     novo_lote.quantidade = quantidade  # Se for um novo lote, define a quantidade inicial
                 novo_lote.save()
 
-                return novo_lote
+                # Retornar o novo lote, o lote original e a quantidade transferida
+                return novo_lote, lote_original, quantidade
         return None
-
-

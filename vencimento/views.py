@@ -3,8 +3,9 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.forms import AuthenticationForm
 from django.db.models import Q
 from .models import Lote, Categoria, ConfiguracaoGlobal
-from vencimento.models import Casa,Lote
+from vencimento.models import Casa,Lote, HistoricoLog
 from django.utils import timezone
+from django.db import transaction
 from django.urls import reverse
 from datetime import timedelta
 from django.db.models import Count
@@ -21,6 +22,19 @@ from vencimento.forms import TransferenciaLoteForm, SaidaProdutoForm
 from django.contrib import messages
 from django.core.mail import send_mail
 import json
+
+
+def send_notification_email(request):
+    send_mail(
+        'Lote Próximo do Vencimento',  # Assunto
+        'Seu lote está próximo de vencer.',  # Mensagem
+        'servicedesk@rioscenarium.com.br',  # E-mail de origem
+        ['destinatario@example.com'],  # Lista de e-mails que receberão a mensagem
+        fail_silently=False,
+    )
+    return HttpResponse("E-mail enviado com sucesso!")
+
+
 
 @login_required
 def lista_lotes(request):
@@ -107,6 +121,38 @@ def lista_lotes(request):
 
 
 
+
+@login_required
+@require_POST
+def deletar_lote_view(request):
+    lote_id = request.POST.get('lote_id')
+    if not lote_id:
+        messages.error(request, 'ID do lote não fornecido.')
+        return redirect('vencimento:lista_lotes')
+
+    try:
+        lote = Lote.objects.get(id=lote_id)
+        with transaction.atomic():
+            # Registro no histórico de logs antes de deletar o lote
+            log = HistoricoLog.objects.create(
+                usuario=request.user,
+                lote=lote,
+                casa=lote.casa,
+                acao='DE',
+                descricao=f'Deletado lote {lote.identificacao} de {lote.produto.nome} na casa {lote.casa.nome}',
+            )
+            lote.delete()
+            messages.success(request, 'Lote deletado com sucesso.')
+    except Lote.DoesNotExist:
+        messages.error(request, 'Lote não encontrado.')
+    except Exception as e:
+        messages.error(request, f'Erro ao deletar lote: {str(e)}')
+
+    return redirect('vencimento:lista_lotes')
+
+
+
+
 @login_required
 def lotes_vencidos(request):
     lotes = Lote.objects.filter(data_validade__lt=timezone.now().date())
@@ -118,7 +164,8 @@ def adicionar_lote(request):
     if request.method == 'POST':
         form = LoteForm(request.POST)
         if form.is_valid():
-            form.save()
+            # Passar o usuário logado para o método save
+            form.save(user=request.user)
             messages.success(request, 'Lote adicionado com sucesso!')
             return redirect('vencimento:lista_lotes')
         else:
@@ -129,20 +176,31 @@ def adicionar_lote(request):
 
 
 @require_POST
+@login_required
 def registrar_saida(request):
     lote_id = request.POST.get('lote_id')
     quantidade = request.POST.get('quantidade_a_retirar')
-    # Implemente a lógica para registrar a saída
     try:
         lote = Lote.objects.get(id=lote_id)
         if lote.quantidade >= int(quantidade):
             lote.quantidade -= int(quantidade)
             lote.save()
+
+            # Registrar a ação no histórico de logs
+            HistoricoLog.objects.create(
+                usuario=request.user,
+                lote=lote,
+                casa=lote.casa,
+                acao='RS',
+                descricao=f'Registrada saída de {quantidade} unidades do lote {lote.identificacao} do produto {lote.produto.nome} na casa {lote.casa.nome}.'
+            )
+
             messages.success(request, 'Saída registrada com sucesso.')
         else:
             messages.error(request, 'Quantidade a retirar excede o estoque disponível.')
     except Lote.DoesNotExist:
         messages.error(request, 'Lote não encontrado.')
+
     return redirect('vencimento:lista_lotes')
 
 
@@ -150,9 +208,19 @@ def registrar_saida(request):
 def transferencia_lotes_view(request):
     form = TransferenciaLoteForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        novo_lote = form.save()
-        if novo_lote:
+        result = form.save()  # Esta chamada agora retorna uma tupla se bem-sucedida
+        if result:
+            novo_lote, lote_original, quantidade = result
             messages.success(request, f'Lote transferido com sucesso para {novo_lote.casa.nome}.')
+            
+            # Registrar a transferência no histórico de logs
+            HistoricoLog.objects.create(
+                usuario=request.user,
+                lote=lote_original,
+                casa=novo_lote.casa,
+                acao='TR',
+                descricao=f'Transferência de {quantidade} unidades do lote {lote_original.identificacao} para a casa {novo_lote.casa.nome}.'
+            )
         else:
             messages.error(request, 'Falha ao transferir lote. Verifique a quantidade disponível.')
 
@@ -161,30 +229,26 @@ def transferencia_lotes_view(request):
     return render(request, 'vencimento/transferencia_lotes.html', {'form': form})
 
 
-@require_POST
-@csrf_exempt
-def deletar_lote(request):
-    try:
-        data = json.loads(request.body)
-        lote_id = data.get('lote_id')
-        if lote_id:
-            lote = Lote.objects.get(id=lote_id)
-            lote.delete()
-            return JsonResponse({'success': True})
-    except Lote.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Lote não encontrado'}, status=404)
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Dados inválidos'}, status=400)
-    return JsonResponse({'success': False, 'error': 'ID do lote não fornecido'}, status=400)
+
 
 
 
 @login_required
 def exportar_lotes_excel(request):
-    lotes = Lote.objects.all().values(
-        'produto__nome', 'categoria__nome', 'identificacao',
-        'quantidade', 'data_chegada', 'data_validade'
-    )
+    casa_id = request.session.get('casa_id')
+    if casa_id:
+        # Filtrar lotes pela casa em sessão
+        lotes = Lote.objects.filter(casa_id=casa_id).values(
+            'produto__nome', 'categoria__nome', 'identificacao',
+            'quantidade', 'data_chegada', 'data_validade'
+        )
+    else:
+        # Se não houver casa na sessão (ou se for superusuário), considera todos os lotes
+        lotes = Lote.objects.all().values(
+            'produto__nome', 'categoria__nome', 'identificacao',
+            'quantidade', 'data_chegada', 'data_validade'
+        )
+
     df = pd.DataFrame(lotes)
     df.columns = ['Produto', 'Categoria', 'Identificação', 'Quantidade', 'Data de Chegada', 'Data de Validade']
 

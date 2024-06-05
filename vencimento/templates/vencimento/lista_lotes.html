@@ -157,7 +157,11 @@
     {% for lote in lotes %}
     <tr class="{% if lote.esta_vencido %}vencido{% elif lote.esta_urgente %}urgente{% endif %}">
       <td style="display: flex; align-items: center;">
-        <button type="button" onclick="confirmarExclusao('{{ lote.id }}', event)" class="btn btn-danger btn-sm" style="margin-right: 10px;">X</button>
+        <form method="post" action="{% url 'vencimento:deletar_lote' %}" onsubmit="return confirm('Tem certeza que deseja excluir este lote?');">
+          {% csrf_token %}
+          <input type="hidden" name="lote_id" value="{{ lote.id }}">
+          <button type="submit" class="btn btn-danger btn-sm" style="margin-right: 10px;">X</button>
+        </form>
         <span class="nome-produto">{{ lote.produto.nome }}</span>
       </td>
       
@@ -204,34 +208,7 @@
 </table>
 <script>
   
-  function confirmarExclusao(loteId, event) {
-    event.preventDefault();
-    if (confirm('Tem certeza que deseja excluir este lote?')) {
-        fetch('deletar_lote/', { // URL corrigida
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json', // Definir o Content-Type como json
-                'X-CSRFToken': getCookie('csrftoken'), // Função para obter o token CSRF do cookie
-            },
-            body: JSON.stringify({ lote_id: loteId }) // Enviar lote_id no corpo
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Lote deletado com sucesso!');
-                location.reload(); // Recarrega a página para atualizar a lista
-            } else {
-                alert('Erro ao deletar lote: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Erro na requisição:', error);
-            alert('Erro ao deletar lote.');
-        });
-    }
-}
-
-
+  
 // Função para obter o valor do cookie CSRF do Django
 function getCookie(name) {
     let cookieValue = null;
@@ -246,6 +223,33 @@ function getCookie(name) {
         }
     }
     return cookieValue;
+}
+
+function confirmarExclusao(loteId, event) {
+  event.preventDefault();
+  if (confirm('Tem certeza que deseja excluir este lote?')) {
+      fetch('deletar_lote/', { // URL corrigida
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json', // Definir o Content-Type como json
+              'X-CSRFToken': getCookie('csrftoken'), // Função para obter o token CSRF do cookie
+          },
+          body: JSON.stringify({ lote_id: loteId }) // Enviar lote_id no corpo
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.success) {
+              alert('Lote deletado com sucesso!');
+              location.reload(); // Recarrega a página para atualizar a lista
+          } else {
+              alert('Erro ao deletar lote: ' + data.error);
+          }
+      })
+      .catch(error => {
+          console.error('Erro na requisição:', error);
+          alert('Erro ao deletar lote.');
+      });
+  }
 }
 
     

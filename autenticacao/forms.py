@@ -3,8 +3,8 @@ from django.contrib.auth.forms import AuthenticationForm
 from vencimento.models import Casa  # Importando Casa do outro app
 
 class CustomLoginForm(AuthenticationForm):
-    casa = forms.ModelChoiceField(queryset=Casa.objects.all(), required=True, label="Casa")
+    casa = forms.ModelChoiceField(queryset=Casa.objects.none(), required=True)
 
     def __init__(self, *args, **kwargs):
         super(CustomLoginForm, self).__init__(*args, **kwargs)
-        self.fields['casa'].widget.attrs.update({'class': 'form-control'})  # Adicionar classe CSS se necessário
+        self.fields['casa'].queryset = Casa.objects.all()

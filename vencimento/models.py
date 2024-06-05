@@ -4,6 +4,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
+from django.contrib.auth.models import User
 
 class Categoria(models.Model):
     nome = models.CharField(max_length=100, unique=True)
@@ -29,6 +30,8 @@ class ConfiguracaoGlobal(models.Model):
 class Casa(models.Model):
     nome = models.CharField(max_length=100)
     endereco = models.CharField(max_length=100)
+    email_contato = models.EmailField(null=True)
+
 
     class Meta:
         permissions = [
@@ -77,9 +80,30 @@ class Lote(models.Model):
         return self.data_validade <= data_urgencia and not self.esta_vencido()
 
     def __str__(self):
-        return f'{self.identificacao.upper()} - Lote de {self.produto.nome} - Quantidade: {self.quantidade} - Validade: {self.data_validade} - Destinado a {self.casa_destinada.nome}'
+        casa_destinada_nome = self.casa_destinada.nome if self.casa_destinada else "Nenhuma"
+        return f'{self.identificacao.upper()} - Lote de {self.produto.nome} - Quantidade: {self.quantidade} - Validade: {self.data_validade} - Destinado a {casa_destinada_nome}'
     
 
     class Meta:
         verbose_name = "Lote"
         verbose_name_plural = "Lotes"
+
+
+    
+class HistoricoLog(models.Model):
+    TIPO_ACAO = (
+        ('AD', 'Adicionar'),
+        ('TR', 'Transferir'),
+        ('DE', 'Deletar'),
+        ('RS', 'Registrar Saída'),
+    )
+
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    lote = models.ForeignKey('Lote', on_delete=models.SET_NULL, null=True, blank=True)
+    casa = models.ForeignKey('Casa', on_delete=models.SET_NULL, null=True, verbose_name="Casa Relacionada")  # Adicionando relação com Casa
+    acao = models.CharField(max_length=2, choices=TIPO_ACAO)
+    descricao = models.TextField()
+    data_hora = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.usuario.username} realizou {self.get_acao_display()} em {self.data_hora.strftime("%d/%m/%Y %H:%M")}'
