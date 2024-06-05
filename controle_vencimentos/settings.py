@@ -162,7 +162,7 @@ EMAIL_PORT = 465  # Porta do servidor SMTP com SSL
 EMAIL_USE_TLS = False  # Como é SSL, TLS deve ser False
 EMAIL_USE_SSL = True  # Ativar conexão segura SSL
 EMAIL_HOST_USER = 'servicedesk@rioscenarium.com.br'  # Nome de usuário para autenticação SMTP
-EMAIL_HOST_PASSWORD = 'Servicedesk@2022'  # Senha para autenticação SMTP
+EMAIL_HOST_PASSWORD = ''  # Senha para autenticação SMTP
 
 
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
