@@ -16,6 +16,7 @@ urlpatterns = [
     path('registrar-saida/', views.registrar_saida, name='registrar_saida'),  # URL para o registro de saída
     path('transferencia/', views.transferencia_lotes_view, name='transferencia_lotes_view'),
     path('deletar_lote/', views.deletar_lote_view, name='deletar_lote'),
+    path('devolucao_view/', views.devolucao_view, name='devolucao_view'),
 
 ]
 

@@ -134,3 +134,29 @@ class TransferenciaLoteForm(forms.Form):
                 # Retornar o novo lote, o lote original e a quantidade transferida
                 return novo_lote, lote_original, quantidade
         return None
+
+
+class DevolucaoForm(forms.Form):
+    lote = forms.ModelChoiceField(
+        queryset=Lote.objects.none(),  # Iniciar com uma queryset vazia
+        widget=forms.Select(attrs={'class': 'select2', 'style': 'width: 100%'}),
+        label="Lote"
+    )
+    quantidade = forms.IntegerField(min_value=1, label="Quantidade a Devolver")
+
+    def __init__(self, *args, **kwargs):
+        casa = kwargs.pop('casa', None)  # Receber a casa como argumento
+        super(DevolucaoForm, self).__init__(*args, **kwargs)
+        if casa:
+            self.fields['lote'].queryset = Lote.objects.filter(casa=casa)
+        self.helper = FormHelper()
+        self.helper.layout = Layout(
+            Field('lote'),
+            Field('quantidade'),
+            Submit('submit', 'Devolver', css_class='btn-primary')
+        )
+
+    def clean_quantidade(self):
+        quantidade = self.cleaned_data['quantidade']
+        lote = self.cleaned_data.get('lote')
+        return quantidade

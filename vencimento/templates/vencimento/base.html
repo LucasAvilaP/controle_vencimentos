@@ -40,6 +40,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'vencimento:transferencia_lotes_view' %}">Transferir</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'vencimento:devolucao_view' %}">Devolução</a>
+                    </li>
                     {% if user.is_staff %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'admin:index' %}">Administrar</a>

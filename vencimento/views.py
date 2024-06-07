@@ -18,7 +18,7 @@ from openpyxl.utils import get_column_letter
 import requests
 from requests import request
 from .forms import LoteForm, Lote
-from vencimento.forms import TransferenciaLoteForm, SaidaProdutoForm
+from vencimento.forms import TransferenciaLoteForm, SaidaProdutoForm, DevolucaoForm
 from django.contrib import messages
 from django.core.mail import send_mail
 import json
@@ -229,7 +229,35 @@ def transferencia_lotes_view(request):
     return render(request, 'vencimento/transferencia_lotes.html', {'form': form})
 
 
+@login_required
+def devolucao_view(request):
+    casa_id = request.session.get('casa_id')
+    if not casa_id:
+        messages.error(request, "Nenhuma casa selecionada.")
+    
 
+    casa_usuario = Casa.objects.get(id=casa_id)
+
+    if request.method == 'POST':
+        form = DevolucaoForm(request.POST, casa=casa_usuario)
+        if form.is_valid():
+            lote = form.cleaned_data['lote']
+            quantidade = form.cleaned_data['quantidade']
+            lote.quantidade += quantidade  # Somar a quantidade devolvida ao valor existente
+            lote.save()
+            HistoricoLog.objects.create(
+                usuario=request.user,
+                lote=lote,
+                casa=casa_usuario,
+                acao='DV',  # Supondo que 'DV' seja o código para "Devolução"
+                descricao=f'Devolvido {quantidade} unidades ao lote {lote.identificacao}.'
+            )
+            messages.success(request, "Devolução registrada com sucesso.")
+            return redirect('vencimento:lista_lotes')
+    else:
+        form = DevolucaoForm(casa=casa_usuario)
+    
+    return render(request, 'vencimento/devolucao.html', {'form': form})
 
 
 

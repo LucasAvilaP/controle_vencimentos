@@ -96,6 +96,7 @@ class HistoricoLog(models.Model):
         ('TR', 'Transferir'),
         ('DE', 'Deletar'),
         ('RS', 'Registrar Saída'),
+        ('DV', 'Devolução'),
     )
 
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
